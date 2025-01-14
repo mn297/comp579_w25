@@ -1,0 +1,6 @@
+[submodule "Bandit_Algorithms"]
+	path = Bandit_Algorithms
+	url = https://github.com/Sagarnandeshwar/Bandit_Algorithms.git
+[submodule "COMP-579-Reinforcement-Learning"]
+	path = COMP-579-Reinforcement-Learning
+	url = https://github.com/ycYiwei/COMP-579-Reinforcement-Learning.git
