@@ -4,3 +4,6 @@
 [submodule "COMP-579-Reinforcement-Learning"]
 	path = COMP-579-Reinforcement-Learning
 	url = https://github.com/ycYiwei/COMP-579-Reinforcement-Learning.git
+[submodule "multi-armed-bandit"]
+	path = multi-armed-bandit
+	url = https://github.com/bakanaouji/multi-armed-bandit.git
