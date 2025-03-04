@@ -7,3 +7,6 @@
 [submodule "multi-armed-bandit"]
 	path = multi-armed-bandit
 	url = https://github.com/bakanaouji/multi-armed-bandit.git
+[submodule "waymo-open-dataset"]
+	path = waymo-open-dataset
+	url = https://github.com/waymo-research/waymo-open-dataset.git
