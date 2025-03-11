@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 
 # First-visit MC prediction (Policy Evaluation)
-def first_visit_mc_prediction(env, policy, gamma=0.9, episodes=5000):
+def first_visit_mc_prediction(env, policy, gamma=0.9, episodes=5000, max_steps=100):
     V = np.zeros(env.observation_space.n)
     returns = {s: [] for s in range(env.observation_space.n)}
 
@@ -12,12 +12,18 @@ def first_visit_mc_prediction(env, policy, gamma=0.9, episodes=5000):
         states, rewards = [], []
         state, _ = env.reset()
         done = False
+        steps = 0
 
-        while not done:
+        while not done and steps < max_steps:
             states.append(state)
             action = policy[state]
             state, reward, done, _, _ = env.step(action)
             rewards.append(reward)
+            steps += 1
+
+        # Add a small penalty if we didn't reach a terminal state
+        if not done and len(rewards) > 0:
+            rewards[-1] -= 0.1
 
         G = 0
         visited_states = set()
@@ -32,7 +38,7 @@ def first_visit_mc_prediction(env, policy, gamma=0.9, episodes=5000):
 
 
 # Monte Carlo Exploring Starts (ES) for control (policy iteration)
-def monte_carlo_es(env, gamma=0.9, episodes=5000):
+def monte_carlo_es(env, gamma=0.9, episodes=5000, max_steps=100):
     Q = np.zeros((env.observation_space.n, env.action_space.n))
     returns = {
         (s, a): []
@@ -46,12 +52,25 @@ def monte_carlo_es(env, gamma=0.9, episodes=5000):
         action = np.random.choice(env.action_space.n)  # exploring start
         episode = []
         done = False
+        steps = 0
 
-        while not done:
+        while not done and steps < max_steps:
             next_state, reward, done, _, _ = env.step(action)
             episode.append((state, action, reward))
             state = next_state
-            action = policy[state] if not done else None
+
+            # Add some exploration during learning
+            if np.random.random() < 0.1:  # 10% exploration
+                action = np.random.choice(env.action_space.n)
+            else:
+                action = policy[state] if not done else None
+
+            steps += 1
+
+        # Add a small penalty if we didn't reach a terminal state
+        if not done and len(episode) > 0:
+            _, _, old_reward = episode[-1]
+            episode[-1] = (episode[-1][0], episode[-1][1], old_reward - 0.1)
 
         G = 0
         visited_state_action_pairs = set()
