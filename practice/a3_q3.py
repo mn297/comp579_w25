@@ -63,7 +63,7 @@ class BoltzmannPolicy:
         self.temperature = temperature
 
     def select_action(self, state):
-        # Get z(s) from the policy network
+        # forward ZNetwork
         z_s = self.policy_network(state)
 
         # Apply Boltzmann distribution (formula from the assignment)
@@ -71,7 +71,7 @@ class BoltzmannPolicy:
         logits = z_s / self.temperature
         probs = F.softmax(logits, dim=-1)
 
-        # Create categorical distribution and sample action
+        # categorical distribution and sample action, exmaple Categorical(probs: tensor([0.1, 0.2, 0.7]))
         m = torch.distributions.Categorical(probs)
         action = m.sample()
 
@@ -92,11 +92,17 @@ class REINFORCE:
     ):
         self.policy_network = ZNetwork(state_dim, action_dim)
         self.policy = BoltzmannPolicy(self.policy_network, temperature)
+        # Use Adam instead of SGD
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=lr)
         self.gamma = gamma
         self.decreasing_temp = decreasing_temp
         self.temp_decay = temp_decay
         self.initial_temp = temperature
+
+    def update(
+        self, state_batch, action_batch, reward_batch, next_state_batch, done_batch
+    ):
+        pass
 
     def train_episode(self, env):
         state, _ = env.reset()
@@ -152,6 +158,52 @@ class REINFORCE:
 
     def reset_temperature(self):
         self.policy.temperature = self.initial_temp
+
+
+def run_trial(epsilon, step_size, seed, env, algorithm, use_buffer, env_name):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    agent = REINFORCE(env, step_size, epsilon, algorithm)
+
+    max_steps_per_episode = 500
+
+    torch.set_grad_enabled(True)
+
+    episode_rewards = []
+    for _ in range(1000):
+        state, _ = env.reset()
+        if env_name == "ALE/Assault-ram-v5":
+            state = (state / 255) - 0.5
+        done = False
+        total_reward = 0
+        n_steps = 0
+        while not done:
+            action = agent.select_action(state)
+            next_state, reward, done, truncated, _ = env.step(action)
+
+            if env_name == "ALE/Assault-ram-v5":
+                next_state = (next_state / 255) - 0.5
+            done = done or truncated
+
+            total_reward += reward
+
+            agent.update(
+                torch.as_tensor(state).to(agent.device).unsqueeze(0),
+                torch.as_tensor(action).to(agent.device).unsqueeze(0),
+                torch.as_tensor(reward).to(agent.device).unsqueeze(0),
+                torch.as_tensor(next_state).to(agent.device).unsqueeze(0),
+                torch.as_tensor(done).float().to(agent.device).unsqueeze(0),
+            )
+
+            state = next_state
+            n_steps += 1
+            if n_steps >= max_steps_per_episode:
+                done = True
+
+        episode_rewards.append(total_reward)
+
+    return episode_rewards
 
 
 # ACTOR-CRITIC IMPLEMENTATION
