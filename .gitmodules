@@ -10,3 +10,6 @@
 [submodule "waymo-open-dataset"]
 	path = waymo-open-dataset
 	url = https://github.com/waymo-research/waymo-open-dataset.git
+[submodule "Deep-Reinforcement-Learning-for-Automated-Stock-Trading-Ensemble-Strategy-ICAIF-2020"]
+	path = Deep-Reinforcement-Learning-for-Automated-Stock-Trading-Ensemble-Strategy-ICAIF-2020
+	url = https://github.com/Jung132914/Deep-Reinforcement-Learning-for-Automated-Stock-Trading-Ensemble-Strategy-ICAIF-2020.git
