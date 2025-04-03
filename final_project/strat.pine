@@ -68,14 +68,28 @@ md = (mi > hi) ? (mi - hi) : (mi < lo) ? (mi - lo) : 0
 sb = ta.sma(md, lengthSignal)
 sh = md - sb
 
+// Add variables to track long position profits
+var float longProfitTotal = 0.0
+var bool hadProfitableLong = false
 
 if tradeSignal > StrongBound
     if (ta.crossover(sh, 0))
         // if MACD < 0 and aMACD < 0 
         if md < 0 and sb < 0 
             strategy.entry("long", strategy.long, comment="LONG!!")
-if tradeSignal < -WeakBound
+
+// Track long position profits
+if strategy.position_size[1] > 0 and strategy.position_size <= 0
+    // A long position was just closed
+    lastTradeProfit = strategy.openprofit
+    longProfitTotal := longProfitTotal + lastTradeProfit
+    if lastTradeProfit > 0
+        hadProfitableLong := true
+
+if tradeSignal < WeakBound
     if (ta.crossunder(sh, 0))
-        strategy.entry("short", strategy.short, comment="SHORT")
-//plot(strategy.equity, title="equity", color=color.red, linewidth=2, style=plot.style_areabr)
+        // Only take short positions if there's been profit from long positions
+        if hadProfitableLong
+            strategy.entry("short", strategy.short, comment="SHORT after long profit")
+
 strategy.exit("sl/tp", loss = dynSLpoints(3), trail_points = dynSLpoints(5), trail_offset = dynSLpoints(2))
