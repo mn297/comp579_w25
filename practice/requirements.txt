@@ -1,0 +1,16 @@
+gym-anytrading
+yfinance
+gymnasium
+stable_baselines3
+numpy
+pandas
+matplotlib
+datasets
+geojson
+geopandas
+graphviz
+jupyter
+medmnist
+mujoco
+PyMuPDF
+scikit-learn
