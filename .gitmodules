@@ -16,3 +16,6 @@
 [submodule "DRQN_Stock_Trading"]
 	path = DRQN_Stock_Trading
 	url = https://github.com/conditionWang/DRQN_Stock_Trading.git
+[submodule "gym-anytrading"]
+    path = gym-anytrading
+    url = https://github.com/AminHP/gym-anytrading.git
