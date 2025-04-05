@@ -13,3 +13,6 @@
 [submodule "Deep-Reinforcement-Learning-for-Automated-Stock-Trading-Ensemble-Strategy-ICAIF-2020"]
 	path = Deep-Reinforcement-Learning-for-Automated-Stock-Trading-Ensemble-Strategy-ICAIF-2020
 	url = https://github.com/Jung132914/Deep-Reinforcement-Learning-for-Automated-Stock-Trading-Ensemble-Strategy-ICAIF-2020.git
+[submodule "DRQN_Stock_Trading"]
+	path = DRQN_Stock_Trading
+	url = https://github.com/conditionWang/DRQN_Stock_Trading.git

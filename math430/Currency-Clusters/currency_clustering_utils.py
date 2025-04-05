@@ -781,3 +781,439 @@ def ward(data_30m, data_5m, clusters):
 
     plt.tight_layout()
     plt.show()
+
+
+def ward(data_30m, data_5m, clusters):
+    def calculate_reversals(prices, centers, look_forward=4, reversal_threshold=0.002):
+        reversals = {center: 0 for center in centers}
+        for i in range(len(prices)):
+            for center in centers:
+                if abs(prices[i] - center) / center <= margin_of_error:
+                    for j in range(i + 1, min(i + 1 + look_forward, len(prices))):
+                        if abs(prices[j] - prices[i]) / prices[i] >= reversal_threshold:
+                            reversals[center] += 1
+                            break
+        return reversals
+
+    # Load 30-minute data and split
+    prices = data_30m["close"].values.reshape(-1, 1)
+    train_prices, test_prices_30m = train_test_split(
+        prices, test_size=0.075, shuffle=False
+    )
+    test_prices = data_5m[data_5m["time"] >= 1696867200]["close"].values
+
+    # Applying Ward's hierarchical clustering
+    ward = AgglomerativeClustering(n_clusters=clusters, linkage="ward")
+    labels = ward.fit_predict(
+        data_30m[data_30m["time"] < 1696867200][["close", "open", "high", "low"]].values
+    )
+
+    # Calculate the mean price for each cluster
+    centers = [
+        prices[data_30m["time"] < 1696867200][labels == i].mean()
+        for i in range(ward.n_clusters)
+    ]
+
+    # Define margin of error
+    margin_of_error = 0.003  # ±0.3%
+
+    # Calculate hits on the test set
+    hits = {center: 0 for center in centers}
+    for price in test_prices:
+        for center in centers:
+            if abs(price - center) / center <= margin_of_error:
+                hits[center] += 1
+
+    num_simulations = 100
+    total_hits_model, total_reversals_model = np.zeros(len(centers)), np.zeros(
+        len(centers)
+    )
+    total_hits_wiener, total_reversals_wiener = np.zeros(len(centers)), np.zeros(
+        len(centers)
+    )
+
+    for seed in range(num_simulations):
+        np.random.seed(seed)
+
+        # Re-simulate Wiener process
+        wiener_process = np.empty_like(test_prices)
+        wiener_process[0] = test_prices[0]
+        for i in range(1, len(test_prices)):
+            wiener_process[i] = wiener_process[i - 1] + np.random.normal(
+                0, np.std(train_prices) / np.sqrt(len(train_prices))
+            )
+
+        # Calculate hits and reversals for actual data
+        hits = {center: 0 for center in centers}
+        actual_reversals = calculate_reversals(test_prices, centers)
+        for price in test_prices:
+            for center in centers:
+                if abs(price - center) / center <= margin_of_error:
+                    hits[center] += 1
+
+        # Calculate hits and reversals for Wiener process
+        wiener_hits = {center: 0 for center in centers}
+        wiener_reversals = calculate_reversals(wiener_process, centers)
+        for price in wiener_process:
+            for center in centers:
+                if abs(price - center) / center <= margin_of_error:
+                    wiener_hits[center] += 1
+
+        # Accumulate hits and reversals
+        for i, center in enumerate(centers):
+            total_hits_model[i] += hits[center]
+            total_reversals_model[i] += actual_reversals[center]
+            total_hits_wiener[i] += wiener_hits[center]
+            total_reversals_wiener[i] += wiener_reversals[center]
+
+    # Calculate mean hit and reversal rates, excluding levels with zero hits or reversals
+    mean_hits_model = total_hits_model / num_simulations
+    mean_reversals_model = total_reversals_model / num_simulations
+    mean_hits_wiener = total_hits_wiener / num_simulations
+    mean_reversals_wiener = total_reversals_wiener / num_simulations
+
+    # Exclude levels with zero total hits or total reversals from mean values
+    non_zero_indices_hits = np.where(mean_hits_model != 0)[0]
+    non_zero_indices_reversals = np.where(mean_reversals_model != 0)[0]
+
+    # Extract non-zero centers
+    non_zero_centers_hits = [centers[i] for i in non_zero_indices_hits]
+    non_zero_centers_reversals = [centers[i] for i in non_zero_indices_reversals]
+
+    # Plotting with mean hit and reversal rates (excluding zero values)
+    plt.figure(figsize=(15, 8))
+
+    # Plot train data, test data, and the first 10 Wiener processes
+    plt.subplot(2, 2, 1)
+    plt.plot(range(len(train_prices)), train_prices, label="Train Data")
+    plt.plot(
+        range(len(train_prices), len(train_prices) + len(test_prices)),
+        test_prices,
+        label="Test Data",
+    )
+    for seed in range(10):
+        np.random.seed(seed)
+        wiener_temp = np.empty_like(test_prices)
+        wiener_temp[0] = test_prices[0]
+        for i in range(1, len(test_prices)):
+            wiener_temp[i] = wiener_temp[i - 1] + np.random.normal(
+                0, np.std(train_prices) / np.sqrt(len(train_prices))
+            )
+        plt.plot(
+            range(len(train_prices), len(train_prices) + len(wiener_temp)),
+            wiener_temp,
+            alpha=0.15,
+        )
+    for level in centers:
+        plt.axhline(y=level, color="red", linestyle="--")
+    plt.title("Train Data, Test Data, and Wiener Processes")
+    plt.legend()
+
+    # Plot for mean hit counts comparison (excluding zero values)
+    plt.subplot(2, 2, 2)
+    width = 0.35
+    indices_hits = np.arange(len(non_zero_centers_hits))
+    plt.bar(
+        indices_hits - width / 2,
+        mean_hits_model[non_zero_indices_hits],
+        width,
+        label="Model Mean Hits",
+    )
+    plt.bar(
+        indices_hits + width / 2,
+        mean_hits_wiener[non_zero_indices_hits],
+        width,
+        label="Wiener Process Mean Hits",
+    )
+    plt.xlabel("Cluster Centers")
+    plt.ylabel("Mean Hit Counts")
+    plt.title("Mean Hit Counts Comparison")
+    plt.xticks(
+        indices_hits, [f"{center:.4f}" for center in non_zero_centers_hits], rotation=45
+    )
+    plt.legend()
+
+    # Plot for mean reversal counts comparison (excluding zero values)
+    plt.subplot(2, 1, 2)
+    indices_reversals = np.arange(len(non_zero_centers_reversals))
+    plt.bar(
+        indices_reversals - width / 2,
+        mean_reversals_model[non_zero_indices_reversals],
+        width,
+        label="Model Mean Reversals",
+    )
+    plt.bar(
+        indices_reversals + width / 2,
+        mean_reversals_wiener[non_zero_indices_reversals],
+        width,
+        label="Wiener Process Mean Reversals",
+    )
+    plt.xlabel("Cluster Centers")
+    plt.ylabel("Mean Reversal Counts")
+    plt.title("Mean Reversal Counts Comparison")
+    plt.xticks(
+        indices_reversals,
+        [f"{center:.4f}" for center in non_zero_centers_reversals],
+        rotation=45,
+    )
+    plt.legend()
+
+    # Statistical comparison for hit rate (excluding zero values)
+    non_zero_hits_model = np.array(list(hits.values()))[non_zero_indices_hits]
+    non_zero_wiener_hits = np.array(list(wiener_hits.values()))[non_zero_indices_hits]
+    t_stat, p_value = stats.ttest_ind(non_zero_hits_model, non_zero_wiener_hits)
+    print(
+        "Model Hit Rate:",
+        sum(non_zero_hits_model) / (len(test_prices) * len(non_zero_centers_hits)),
+    )
+    print(
+        "Wiener Process Hit Rate:",
+        sum(non_zero_wiener_hits) / (len(wiener_process) * len(non_zero_centers_hits)),
+    )
+    print("t-statistic:", t_stat)
+    print("p-value:", p_value)
+
+    # Statistical comparison for reversal rate (excluding zero values)
+    non_zero_actual_reversals = np.array(list(actual_reversals.values()))[
+        non_zero_indices_reversals
+    ]
+    non_zero_wiener_reversals = np.array(list(wiener_reversals.values()))[
+        non_zero_indices_reversals
+    ]
+    t_stat_reversals, p_value_reversals = stats.ttest_ind(
+        non_zero_actual_reversals, non_zero_wiener_reversals
+    )
+    print(
+        "\n\nModel Reversal Rate:",
+        sum(non_zero_actual_reversals)
+        / (len(test_prices) * len(non_zero_centers_reversals)),
+    )
+    print(
+        "Wiener Process Reversal Rate:",
+        sum(non_zero_wiener_reversals)
+        / (len(wiener_process) * len(non_zero_centers_reversals)),
+    )
+    print("Reversal t-statistic:", t_stat_reversals)
+    print("Reversal p-value:", p_value_reversals)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def nearest(data_30m, data_5m, clusters):
+    def calculate_reversals(prices, centers, look_forward=4, reversal_threshold=0.002):
+        reversals = {center: 0 for center in centers}
+        for i in range(len(prices)):
+            for center in centers:
+                if abs(prices[i] - center) / center <= margin_of_error:
+                    for j in range(i + 1, min(i + 1 + look_forward, len(prices))):
+                        if abs(prices[j] - prices[i]) / prices[i] >= reversal_threshold:
+                            reversals[center] += 1
+                            break
+        return reversals
+
+    # Load 30-minute data and split
+    prices = data_30m["close"].values.reshape(-1, 1)
+    train_prices, test_prices_30m = train_test_split(
+        prices, test_size=0.075, shuffle=False
+    )
+    test_prices = data_5m[data_5m["time"] >= 1696867200]["close"].values
+
+    # Applying Spectral Clustering
+    spectral = SpectralClustering(
+        n_clusters=clusters, affinity="nearest_neighbors", random_state=0
+    )
+    labels = spectral.fit_predict(
+        data_30m[data_30m["time"] < 1696867200][["close", "open", "high", "low"]].values
+    )
+
+    # Calculate the mean price for each cluster
+    centers = [
+        prices[data_30m["time"] < 1696867200][labels == i].mean()
+        for i in range(spectral.n_clusters)
+    ]
+
+    # Define margin of error
+    margin_of_error = 0.003  # ±0.3%
+
+    # Calculate hits on the test set
+    hits = {center: 0 for center in centers}
+    for price in test_prices:
+        for center in centers:
+            if abs(price - center) / center <= margin_of_error:
+                hits[center] += 1
+
+    num_simulations = 100
+    total_hits_model, total_reversals_model = np.zeros(len(centers)), np.zeros(
+        len(centers)
+    )
+    total_hits_wiener, total_reversals_wiener = np.zeros(len(centers)), np.zeros(
+        len(centers)
+    )
+
+    for seed in range(num_simulations):
+        np.random.seed(seed)
+
+        # Re-simulate Wiener process
+        wiener_process = np.empty_like(test_prices)
+        wiener_process[0] = test_prices[0]
+        for i in range(1, len(test_prices)):
+            wiener_process[i] = wiener_process[i - 1] + np.random.normal(
+                0, np.std(train_prices) / np.sqrt(len(train_prices))
+            )
+
+        # Calculate hits and reversals for actual data
+        hits = {center: 0 for center in centers}
+        actual_reversals = calculate_reversals(test_prices, centers)
+        for price in test_prices:
+            for center in centers:
+                if abs(price - center) / center <= margin_of_error:
+                    hits[center] += 1
+
+        # Calculate hits and reversals for Wiener process
+        wiener_hits = {center: 0 for center in centers}
+        wiener_reversals = calculate_reversals(wiener_process, centers)
+        for price in wiener_process:
+            for center in centers:
+                if abs(price - center) / center <= margin_of_error:
+                    wiener_hits[center] += 1
+
+        # Accumulate hits and reversals
+        for i, center in enumerate(centers):
+            total_hits_model[i] += hits[center]
+            total_reversals_model[i] += actual_reversals[center]
+            total_hits_wiener[i] += wiener_hits[center]
+            total_reversals_wiener[i] += wiener_reversals[center]
+
+    # Calculate mean hit and reversal rates, excluding levels with zero hits or reversals
+    mean_hits_model = total_hits_model / num_simulations
+    mean_reversals_model = total_reversals_model / num_simulations
+    mean_hits_wiener = total_hits_wiener / num_simulations
+    mean_reversals_wiener = total_reversals_wiener / num_simulations
+
+    # Exclude levels with zero total hits or total reversals from mean values
+    non_zero_indices_hits = np.where(mean_hits_model != 0)[0]
+    non_zero_indices_reversals = np.where(mean_reversals_model != 0)[0]
+
+    # Extract non-zero centers
+    non_zero_centers_hits = [centers[i] for i in non_zero_indices_hits]
+    non_zero_centers_reversals = [centers[i] for i in non_zero_indices_reversals]
+
+    # Plotting with mean hit and reversal rates (excluding zero values)
+    plt.figure(figsize=(15, 8))
+
+    # Plot train data, test data, and the first 10 Wiener processes
+    plt.subplot(2, 2, 1)
+    plt.plot(range(len(train_prices)), train_prices, label="Train Data")
+    plt.plot(
+        range(len(train_prices), len(train_prices) + len(test_prices)),
+        test_prices,
+        label="Test Data",
+    )
+    for seed in range(10):
+        np.random.seed(seed)
+        wiener_temp = np.empty_like(test_prices)
+        wiener_temp[0] = test_prices[0]
+        for i in range(1, len(test_prices)):
+            wiener_temp[i] = wiener_temp[i - 1] + np.random.normal(
+                0, np.std(train_prices) / np.sqrt(len(train_prices))
+            )
+        plt.plot(
+            range(len(train_prices), len(train_prices) + len(wiener_temp)),
+            wiener_temp,
+            alpha=0.15,
+        )
+    for level in centers:
+        plt.axhline(y=level, color="red", linestyle="--")
+    plt.title("Train Data, Test Data, and Wiener Processes")
+    plt.legend()
+
+    # Plot for mean hit counts comparison (excluding zero values)
+    plt.subplot(2, 2, 2)
+    width = 0.35
+    indices_hits = np.arange(len(non_zero_centers_hits))
+    plt.bar(
+        indices_hits - width / 2,
+        mean_hits_model[non_zero_indices_hits],
+        width,
+        label="Model Mean Hits",
+    )
+    plt.bar(
+        indices_hits + width / 2,
+        mean_hits_wiener[non_zero_indices_hits],
+        width,
+        label="Wiener Process Mean Hits",
+    )
+    plt.xlabel("Cluster Centers")
+    plt.ylabel("Mean Hit Counts")
+    plt.title("Mean Hit Counts Comparison")
+    plt.xticks(
+        indices_hits, [f"{center:.4f}" for center in non_zero_centers_hits], rotation=45
+    )
+    plt.legend()
+
+    # Plot for mean reversal counts comparison (excluding zero values)
+    plt.subplot(2, 1, 2)
+    indices_reversals = np.arange(len(non_zero_centers_reversals))
+    plt.bar(
+        indices_reversals - width / 2,
+        mean_reversals_model[non_zero_indices_reversals],
+        width,
+        label="Model Mean Reversals",
+    )
+    plt.bar(
+        indices_reversals + width / 2,
+        mean_reversals_wiener[non_zero_indices_reversals],
+        width,
+        label="Wiener Process Mean Reversals",
+    )
+    plt.xlabel("Cluster Centers")
+    plt.ylabel("Mean Reversal Counts")
+    plt.title("Mean Reversal Counts Comparison")
+    plt.xticks(
+        indices_reversals,
+        [f"{center:.4f}" for center in non_zero_centers_reversals],
+        rotation=45,
+    )
+    plt.legend()
+
+    # Statistical comparison for hit rate (excluding zero values)
+    non_zero_hits_model = np.array(list(hits.values()))[non_zero_indices_hits]
+    non_zero_wiener_hits = np.array(list(wiener_hits.values()))[non_zero_indices_hits]
+    t_stat, p_value = stats.ttest_ind(non_zero_hits_model, non_zero_wiener_hits)
+    print(
+        "Model Hit Rate:",
+        sum(non_zero_hits_model) / (len(test_prices) * len(non_zero_centers_hits)),
+    )
+    print(
+        "Wiener Process Hit Rate:",
+        sum(non_zero_wiener_hits) / (len(wiener_process) * len(non_zero_centers_hits)),
+    )
+    print("t-statistic:", t_stat)
+    print("p-value:", p_value)
+
+    # Statistical comparison for reversal rate (excluding zero values)
+    non_zero_actual_reversals = np.array(list(actual_reversals.values()))[
+        non_zero_indices_reversals
+    ]
+    non_zero_wiener_reversals = np.array(list(wiener_reversals.values()))[
+        non_zero_indices_reversals
+    ]
+    t_stat_reversals, p_value_reversals = stats.ttest_ind(
+        non_zero_actual_reversals, non_zero_wiener_reversals
+    )
+    print(
+        "\n\nModel Reversal Rate:",
+        sum(non_zero_actual_reversals)
+        / (len(test_prices) * len(non_zero_centers_reversals)),
+    )
+    print(
+        "Wiener Process Reversal Rate:",
+        sum(non_zero_wiener_reversals)
+        / (len(wiener_process) * len(non_zero_centers_reversals)),
+    )
+    print("Reversal t-statistic:", t_stat_reversals)
+    print("Reversal p-value:", p_value_reversals)
+
+    plt.tight_layout()
+    plt.show()
