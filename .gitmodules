@@ -25,3 +25,6 @@
 [submodule "Deep-Reinforcement-Learning-with-Stock-Trading"]
 	path = Deep-Reinforcement-Learning-with-Stock-Trading
 	url = https://github.com/theanh97/Deep-Reinforcement-Learning-with-Stock-Trading.git
+[submodule "math430/options-pricing"]
+	path = math430/options-pricing
+	url = https://github.com/ilchen/options-pricing
