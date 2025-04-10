@@ -19,3 +19,9 @@
 [submodule "gym-anytrading"]
 	path = gym-anytrading
 	url = https://github.com/AminHP/gym-anytrading.git
+[submodule "comp579_project"]
+	path = comp579_project
+	url = git@github.com:mn297/comp579_project.git
+[submodule "Deep-Reinforcement-Learning-with-Stock-Trading"]
+	path = Deep-Reinforcement-Learning-with-Stock-Trading
+	url = https://github.com/theanh97/Deep-Reinforcement-Learning-with-Stock-Trading.git
